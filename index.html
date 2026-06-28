@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POKER CIRCLE</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --felt:#0a1f14;--gold:#c8a84b;--gold2:#e6c76a;
+  --cream:#f0e6c8;--dimcream:#a89870;--green:#1a4d32;
+  --neon:#39e07a;--red:#d94040;--blue:#4a9de0;
+  --border:rgba(200,168,75,0.18);--border2:rgba(200,168,75,0.08);
+  --muted:#5a7060;--shadow:0 4px 24px rgba(0,0,0,0.55);
+}
+html{scroll-behavior:smooth}
+body{min-height:100vh;background:radial-gradient(ellipse at 50% 0%,#142a1c 0%,#0a1a10 60%,#060f09 100%);
+  font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;color:var(--cream);display:flex;flex-direction:column;overflow-x:hidden}
+
+/* loading */
+#loading{position:fixed;inset:0;z-index:1000;background:#060f09;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
+.load-suits{font-size:2.8rem;letter-spacing:.4em;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.load-bar{width:180px;height:2px;background:rgba(200,168,75,.15);border-radius:2px;overflow:hidden}
+.load-bar::after{content:'';display:block;height:100%;background:var(--gold);border-radius:2px;animation:lslide 1.2s ease-in-out infinite}
+@keyframes lslide{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+.load-text{font-size:.65rem;letter-spacing:.3em;color:var(--gold);text-transform:uppercase}
+
+/* header */
+#hdr{position:sticky;top:0;z-index:200;background:rgba(6,15,9,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:13px 16px 0}
+.hdr-brand{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.brand-suits{font-size:1.2rem;letter-spacing:.3em;line-height:1}
+.brand-title{font-size:clamp(13px,3.5vw,18px);font-weight:900;letter-spacing:.35em;color:var(--gold);text-transform:uppercase;text-shadow:0 0 20px rgba(200,168,75,.4)}
+.brand-sub{font-size:9px;color:var(--muted);letter-spacing:.25em;text-transform:uppercase;margin-top:1px}
+.nav-tabs{display:flex;overflow-x:auto;scrollbar-width:none}
+.nav-tabs::-webkit-scrollbar{display:none}
+.ntab{flex:1;min-width:60px;background:none;border:none;color:var(--muted);padding:8px 5px 10px;font-size:11px;font-weight:700;letter-spacing:.04em;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:color .15s,border-color .15s;display:flex;flex-direction:column;align-items:center;gap:2px}
+.ntab .icon{font-size:15px;line-height:1}
+.ntab.on{color:var(--gold);border-bottom-color:var(--gold)}
+
+/* main */
+#main{flex:1;padding:18px 13px 40px;max-width:960px;margin:0 auto;width:100%}
+footer{text-align:center;padding:11px;color:var(--muted);font-size:10px;letter-spacing:.1em;border-top:1px solid var(--border2)}
+
+/* toast */
+#toast{display:none;position:fixed;top:15px;left:50%;transform:translateX(-50%);background:var(--green);border:1px solid var(--gold);color:var(--cream);padding:8px 18px;border-radius:8px;z-index:9999;font-size:13px;font-weight:700;box-shadow:var(--shadow);white-space:nowrap}
+
+/* section header */
+.sec-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.sec-title{font-size:11px;font-weight:800;letter-spacing:.22em;color:var(--gold);text-transform:uppercase}
+.sec-sub{font-size:10px;color:var(--muted)}
+
+/* session picker */
+.session-picker{display:flex;align-items:center;background:rgba(0,0,0,.38);border:1px solid var(--border);border-radius:10px;padding:7px 9px;margin-bottom:16px;justify-content:space-between;gap:6px}
+.sp-arrow{background:none;border:1px solid var(--border);color:var(--dimcream);width:34px;height:34px;border-radius:7px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s;flex-shrink:0}
+.sp-arrow:hover:not(:disabled){background:rgba(200,168,75,.12);color:var(--gold)}
+.sp-arrow:disabled{opacity:.22;cursor:default}
+.sp-center{flex:1;text-align:center;padding:0 6px;min-width:0}
+.sp-label{font-size:15px;font-weight:900;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-sub{font-size:10px;color:var(--muted);margin-top:2px}
+.sp-dots{display:flex;justify-content:center;gap:5px;margin-top:6px;flex-wrap:wrap}
+.sp-dot{width:8px;height:8px;border-radius:50%;background:var(--border);cursor:pointer;transition:background .12s,transform .12s;border:none;padding:0}
+.sp-dot.on{background:var(--gold);transform:scale(1.35)}
+
+/* sub tabs */
+.sub-tabs{display:flex;gap:5px;margin-bottom:14px;flex-wrap:wrap}
+.stab{background:transparent;border:1px solid var(--border);color:var(--dimcream);padding:5px 12px;border-radius:20px;cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.05em;transition:all .15s}
+.stab.on{background:var(--gold);border-color:var(--gold);color:var(--felt)}
+
+/* filter bar */
+.filter-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(0,0,0,.3);border:1px solid var(--border2);border-radius:9px;padding:9px 12px;margin-bottom:14px}
+.filter-bar label{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.08em;white-space:nowrap}
+.filter-input{background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:6px;color:var(--cream);padding:6px 10px;font-size:13px;outline:none;min-width:0;transition:border-color .15s;-webkit-appearance:none}
+.filter-input:focus{border-color:var(--gold)}
+.filter-input.search{flex:1;min-width:100px}
+.filter-input.num{width:60px;text-align:center}
+.filter-sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
+
+/* rank cards */
+.rank-list{display:flex;flex-direction:column;gap:9px}
+.rank-card{position:relative;overflow:hidden;background:linear-gradient(100deg,rgba(26,77,50,.32) 0%,rgba(10,31,20,.55) 100%);border:1px solid var(--border2);border-radius:10px;padding:13px 14px;cursor:pointer;transition:border-color .15s,transform .12s;display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:11px}
+.rank-card:hover{border-color:var(--border);transform:translateX(2px)}
+.rank-card.rank-1{border-color:rgba(200,168,75,.5);background:linear-gradient(100deg,rgba(200,168,75,.12) 0%,rgba(10,31,20,.55) 100%)}
+.rank-card.rank-2{border-color:rgba(180,180,180,.25)}
+.rank-card.rank-3{border-color:rgba(180,110,50,.3)}
+.rank-card .dev-bg{position:absolute;left:0;top:0;bottom:0;border-radius:10px 0 0 10px;opacity:.07;pointer-events:none;transition:width .6s cubic-bezier(.22,.68,0,1.2)}
+.rank-pos{text-align:center}
+.rank-pos .suit{font-size:17px;line-height:1;display:block}
+.rank-pos .num{font-size:11px;font-weight:900;color:var(--gold)}
+.rank-info{min-width:0}
+.rank-name-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rank-name{font-size:14px;font-weight:700;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank-meta{font-size:10px;color:var(--muted);margin-top:2px;display:flex;gap:7px;flex-wrap:wrap}
+.rank-right{text-align:right;flex-shrink:0}
+.rank-value{font-size:16px;font-weight:900;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dev-pill{display:inline-flex;align-items:center;justify-content:center;min-width:42px;height:22px;padding:0 7px;border-radius:11px;font-size:11px;font-weight:800;margin-top:3px}
+
+/* 👑 crown badge */
+.crown-badge{font-size:15px;line-height:1;display:block;margin-bottom:1px}
+.crown-gold  {filter:drop-shadow(0 0 4px rgba(255,200,0,.7))}
+.crown-silver{filter:drop-shadow(0 0 4px rgba(180,180,200,.6))}
+.crown-bronze{filter:drop-shadow(0 0 4px rgba(180,110,50,.6))}
+
+/* 初参加・資格バッジ */
+.new-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:10px;background:rgba(74,157,224,.18);border:1px solid rgba(74,157,224,.4);color:#4a9de0;white-space:nowrap;flex-shrink:0}
+.qual-badge{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;background:rgba(200,168,75,.15);border:1px solid rgba(200,168,75,.3);color:var(--gold);white-space:nowrap;flex-shrink:0}
+
+/* empty */
+.empty{text-align:center;padding:55px 20px}
+.empty-icon{font-size:2.8rem;margin-bottom:10px}
+.empty-msg{color:var(--gold);font-size:14px;margin-bottom:6px}
+.empty-sub{color:var(--muted);font-size:12px}
+
+/* player detail */
+.back-btn{background:none;border:1px solid var(--border);color:var(--muted);padding:6px 13px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;margin-bottom:14px;transition:color .12s,border-color .12s}
+.back-btn:hover{color:var(--cream);border-color:var(--dimcream)}
+.player-hero{background:linear-gradient(135deg,rgba(26,77,50,.5) 0%,rgba(10,31,20,.8) 100%);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
+.player-hero-name{font-size:clamp(20px,5vw,28px);font-weight:900;margin:4px 0 13px;display:flex;align-items:center;gap:8px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:10px}
+.stat-box{background:rgba(0,0,0,.25);border:1px solid var(--border2);border-radius:8px;padding:9px 11px}
+.stat-label{font-size:9px;color:var(--muted);letter-spacing:.13em;text-transform:uppercase;margin-bottom:3px}
+.stat-value{font-size:16px;font-weight:900;font-variant-numeric:tabular-nums}
+
+/* chart */
+.chart-section{background:rgba(10,31,20,.5);border:1px solid var(--border2);border-radius:11px;padding:14px;margin-bottom:14px}
+.chart-section h3{font-size:10px;color:var(--muted);letter-spacing:.17em;text-transform:uppercase;margin-bottom:10px}
+.chart-section canvas{max-height:220px}
+
+/* session data table */
+.sess-table-wrap{overflow-x:auto;margin-bottom:14px}
+.sess-table{width:100%;border-collapse:collapse;font-size:12px;min-width:520px}
+.sess-table th{padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--border2);white-space:nowrap}
+.sess-table td{padding:8px 10px;text-align:center;border-bottom:1px solid rgba(30,48,40,.6);vertical-align:middle}
+.sess-table tr:last-child td{border-bottom:none}
+.sess-table tr:hover td{background:rgba(26,77,50,.15)}
+.sess-table .td-left{text-align:left}
+.sess-table .td-name{font-size:11px;color:var(--gold);font-weight:700;white-space:nowrap}
+.absent-row td{opacity:.35}
+
+/* admin */
+.admin-panel{max-width:580px}
+.a-card{background:rgba(10,31,20,.5);border:1px solid var(--border2);border-radius:10px;padding:18px;margin-bottom:12px}
+.a-card h3{font-size:11px;color:var(--gold);font-weight:800;letter-spacing:.14em;text-transform:uppercase;margin-bottom:13px}
+.a-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+.a-row:last-child{margin-bottom:0}
+.sess-selector{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:14px;flex-wrap:wrap}
+.sess-selector label{font-size:11px;color:var(--muted);white-space:nowrap;font-weight:600;letter-spacing:.06em}
+select{background:rgba(0,0,0,.5);border:1px solid var(--border);border-radius:6px;color:var(--cream);padding:6px 28px 6px 10px;font-size:13px;font-weight:700;cursor:pointer;outline:none;flex:1;min-width:100px;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23c8a84b'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center}
+select:focus{border-color:var(--gold)}
+.sess-badge{font-size:10px;font-weight:800;letter-spacing:.09em;padding:3px 9px;border-radius:12px;white-space:nowrap}
+.sess-badge.new{background:rgba(57,224,122,.14);border:1px solid rgba(57,224,122,.32);color:var(--neon)}
+.sess-badge.edit{background:rgba(200,168,75,.14);border:1px solid rgba(200,168,75,.32);color:var(--gold)}
+input[type=text],input[type=number],input[type=password]{background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:7px;color:var(--cream);padding:8px 11px;font-size:14px;outline:none;flex:1;min-width:0;transition:border-color .15s;-webkit-appearance:none}
+input:focus{border-color:var(--gold)}
+input[type=number]{text-align:right}
+.btn{background:var(--green);border:1px solid rgba(200,168,75,.35);color:var(--gold);padding:8px 15px;border-radius:7px;cursor:pointer;font-weight:700;font-size:13px;white-space:nowrap;transition:opacity .12s;letter-spacing:.04em}
+.btn:hover{opacity:.82}
+.btn-gold{background:var(--gold);border-color:var(--gold2);color:var(--felt)}
+.btn-red{background:transparent;border:1px solid rgba(217,64,64,.4);color:var(--red);padding:5px 9px;border-radius:6px;cursor:pointer;font-size:12px}
+.pin-wrap{display:flex;flex-direction:column;align-items:center;gap:11px;padding:8px 0}
+.pin-wrap input{max-width:175px;text-align:center;letter-spacing:.45em;font-size:20px}
+.pin-error{color:var(--red);font-size:12px;display:none}
+/* プレイヤーフィルター */
+.p-filter-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.p-filter-bar input{flex:1;min-width:120px;padding:7px 10px;font-size:13px}
+.p-filter-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.btn-sm{background:rgba(0,0,0,.3);border:1px solid var(--border);color:var(--dimcream);padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;transition:all .12s;white-space:nowrap}
+.btn-sm:hover{border-color:var(--gold);color:var(--gold)}
+.sel-count{font-size:11px;color:var(--gold);font-weight:700;padding:3px 9px;background:rgba(200,168,75,.12);border:1px solid rgba(200,168,75,.25);border-radius:10px;white-space:nowrap}
+.player-edit-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 0;border-bottom:1px solid var(--border2);transition:opacity .15s}
+.player-edit-row.filtered-out{display:none}
+.player-edit-row.unselected{opacity:.32}
+.player-edit-row:last-child{border-bottom:none}
+.pe-cb{width:17px;height:17px;accent-color:var(--gold);cursor:pointer;flex-shrink:0}
+.pe-name{font-size:13px;font-weight:600;min-width:70px;cursor:pointer;user-select:none}
+.pe-input{width:120px;flex:none}
+.pe-cur{font-size:11px;min-width:55px;text-align:right}
+.sess-name-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border2)}
+.sess-name-row:last-child{border-bottom:none}
+.sess-name-label{min-width:52px;font-size:12px;color:var(--gold);font-weight:700}
+.pname-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--border2)}
+.pname-row:last-child{border-bottom:none}
+.pname-label{font-size:12px;font-weight:600;min-width:80px}
+.pname-input{flex:1;font-size:13px;padding:6px 9px}
+
+/* colors */
+.pos{color:var(--neon)}.neg{color:var(--red)}.gold{color:var(--gold)}.muted{color:var(--muted)}
+.felt{color:var(--felt)}
+
+@media(max-width:480px){
+  #main{padding:13px 9px 28px}
+  .rank-card{padding:10px 10px;gap:8px;grid-template-columns:38px 1fr auto}
+  .rank-name{font-size:12px}.rank-value{font-size:14px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .ntab{font-size:10px;min-width:54px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="load-suits"><span style="color:#c8a84b">♠</span><span style="color:#f0e6c8">♣</span><span style="color:#d94040">♥</span><span style="color:#d94040">♦</span></div>
+  <div class="load-bar"></div>
+  <div class="load-text">Loading...</div>
+</div>
+<div id="toast"></div>
+
+<div id="hdr">
+  <div class="hdr-brand">
+    <div class="brand-suits"><span style="color:#c8a84b">♠</span><span style="color:#f0e6c8">♣</span><span style="color:#d94040">♥</span><span style="color:#d94040">♦</span></div>
+    <div><div class="brand-title">Poker Circle</div><div class="brand-sub">Ring Game Tracker</div></div>
+  </div>
+  <nav class="nav-tabs">
+    <button class="ntab on"  data-view="today"  ><span class="icon">🃏</span>直近</button>
+    <button class="ntab"     data-view="alltime"><span class="icon">🏆</span>全期間</button>
+    <button class="ntab"     data-view="player" style="display:none" id="tab-player"><span class="icon">👤</span>選手</button>
+    <button class="ntab"     data-view="admin"  ><span class="icon">⚙️</span>管理</button>
+  </nav>
+</div>
+
+<div id="main"></div>
+<footer>♠ Poker Circle · Firebase リアルタイム同期 · 更新は全員に即時反映</footer>
+
+<script>
+/* ═══════════════════════════════════════════════
+   CONSTANTS & STATE
+═══════════════════════════════════════════════ */
+const STORAGE_KEY="poker_v7";
+const PCOLORS=["#c8a84b","#39e07a","#4a90d9","#e07a39","#a07ae0","#e0399a","#39d9c0","#d9c039","#d94040","#7ae0d9","#7aa0e0","#e0a07a"];
+const SUITS=["♠","♣","♥","♦"];
+const gsuit=r=>SUITS[(r-1)%4];
+const scol =r=>(r-1)%4>=2?"#d94040":"#f0e6c8";
+const pcol =i=>PCOLORS[i%PCOLORS.length];
+
+let DB={players:[],hostPin:"1234",sessionNames:{}};
+let view="today",selPid=null,hostOk=false;
+let atTab="total",todaySi=null,adminSi=null;
+let atSearch="",atMinSess=0;
+let adminFilter="";           // 収支入力欄のプレイヤー検索テキスト
+let adminSelected=new Set();  // チェック済みプレイヤーのpidセット（空=全員対象）
+let adminMode="session";      // "session"=セッション単位入力 / "allsessions"=選手の全回編集
+let adminAllSessPid=null;     // 全回編集モード時の対象プレイヤーid
+let charts={};
+
+/* ═══════════════════════════════════════════════
+   FIREBASE SETUP
+═══════════════════════════════════════════════ */
+const firebaseConfig={
+  apiKey:"AIzaSyBnLa68l8Kb8xV2ZWzXcZIG5LxsnHK_iow",
+  authDomain:"asal-1ebaf.firebaseapp.com",
+  projectId:"asal-1ebaf",
+  storageBucket:"asal-1ebaf.firebasestorage.app",
+  messagingSenderId:"450122987435",
+  appId:"1:450122987435:web:cd82fc0ceeb2ee1e4444ee",
+  measurementId:"G-M87XM983WJ"
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+const DOC=db.collection("poker").doc("data");
+
+/* ═══════════════════════════════════════════════
+   STORAGE — Firestore版
+   loadDB : Firestoreから1回読み込む
+   saveDB : Firestoreへ書き込む
+   startRealtimeSync : onSnapshotでリアルタイム監視
+═══════════════════════════════════════════════ */
+async function loadDB(){
+  try{
+    // 5秒でタイムアウト（ネットワーク遮断・Firebase接続不可の場合に備える）
+    const snap=await Promise.race([
+      DOC.get(),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),5000))
+    ]);
+    if(snap.exists){
+      const data=snap.data();
+      if(data)DB=data;
+    }
+  }catch(e){
+    console.warn("loadDB error:",e.message);
+    // 接続できなくてもアプリは起動する（ローカル初期値で動作）
+  }
+  if(!DB.sessionNames)DB.sessionNames={};
+  if(!DB.players)DB.players=[];
+  if(!DB.hostPin)DB.hostPin="1234";
+}
+
+async function saveDB(){
+  try{
+    await Promise.race([
+      DOC.set(JSON.parse(JSON.stringify(DB))),
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),8000))
+    ]);
+  }catch(e){
+    console.warn("saveDB error:",e.message);
+    toast("⚠️ 保存に失敗しました。ネットワークを確認してください");
+  }
+}
+
+// リアルタイム監視 — 他のユーザーが書き込むと即座に画面更新
+function startRealtimeSync(){
+  DOC.onSnapshot(snap=>{
+    if(!snap.exists)return;
+    const remote=snap.data();
+    // 自分が書き込み中でなければ画面を更新
+    if(JSON.stringify(remote)!==JSON.stringify(DB)){
+      DB=remote;
+      if(!DB.sessionNames)DB.sessionNames={};
+      if(!DB.players)DB.players=[];
+      // todaySiが未設定なら最新に合わせる
+      const max=totalSessions();
+      if(todaySi===null||todaySi>=max)todaySi=Math.max(0,max-1);
+      render();
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   SESSION LABEL
+═══════════════════════════════════════════════ */
+function sessLabel(si){const n=DB.sessionNames[si];return n?`${n}（第${si+1}回）`:`第${si+1}回`;}
+function sessShort(si){const n=DB.sessionNames[si];return n?n:`第${si+1}回`;}
+
+/* ═══════════════════════════════════════════════
+   MATH
+═══════════════════════════════════════════════ */
+function totalSessions(){return DB.players.reduce((m,p)=>Math.max(m,p.sessions.length),0);}
+
+function buildSessionMeta(){
+  const max=totalSessions();
+  return Array.from({length:max},(_,si)=>{
+    const vs=DB.players.filter(p=>p.sessions[si]!==null&&p.sessions[si]!==undefined).map(p=>p.sessions[si]);
+    const n=vs.length;if(!n)return{mean:0,std:0,n:0};
+    const mean=vs.reduce((a,b)=>a+b,0)/n;
+    const std=n>1?Math.sqrt(vs.reduce((a,v)=>a+(v-mean)**2,0)/n):0;
+    return{mean,std,n};
+  });
+}
+
+function devScore(val,mean,std){return std===0?50:+(10*(val-mean)/std+50).toFixed(1);}
+
+function rankInSession(pid,si){
+  const sorted=DB.players.filter(p=>p.sessions[si]!==null&&p.sessions[si]!==undefined)
+    .map(p=>({id:p.id,v:p.sessions[si]})).sort((a,b)=>b.v-a.v);
+  const i=sorted.findIndex(x=>x.id===pid);return i<0?null:i+1;
+}
+
+function isFirstEver(p,si){
+  for(let i=0;i<si;i++){if(p.sessions[i]!==null&&p.sessions[i]!==undefined)return false;}
+  return p.sessions[si]!==null&&p.sessions[si]!==undefined;
+}
+
+function computeStats(){
+  const meta=buildSessionMeta();
+  return DB.players.map((p,pi)=>{
+    const attended=p.sessions.map((v,si)=>({v,si})).filter(x=>x.v!==null&&x.v!==undefined);
+    const total=attended.reduce((a,x)=>a+x.v,0);
+    const count=attended.length;
+    const avg=count>0?total/count:0;
+    const devs=attended.map(x=>{const m=meta[x.si]||{mean:0,std:0};return devScore(x.v,m.mean,m.std);});
+    const avgDev=devs.length>0?+(devs.reduce((a,b)=>a+b,0)/devs.length).toFixed(1):null;
+    const lastAtt=[...attended].reverse()[0]||null;
+    const latestSi=lastAtt?lastAtt.si:null;
+    const latestVal=lastAtt?lastAtt.v:null;
+    const latestMeta=latestSi!==null?(meta[latestSi]||{mean:0,std:0}):null;
+    const latestDev=(latestVal!==null&&latestMeta)?devScore(latestVal,latestMeta.mean,latestMeta.std):null;
+    // per-session detail: all sessions, null if absent
+    const sessionDetails=Array.from({length:Math.max(p.sessions.length,0)},(_,si)=>{
+      const v=p.sessions[si];
+      if(v===null||v===undefined)return{si,v:null,dv:null,rank:null};
+      const m=meta[si]||{mean:0,std:0};
+      return{si,v,dv:devScore(v,m.mean,m.std),rank:rankInSession(p.id,si)};
+    });
+    return{...p,pi,color:pcol(pi),total,count,avg,devs,avgDev,latestSi,latestVal,latestDev,sessionDetails};
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   👑 CROWN QUALIFICATION
+   全開催の半数以上（小数繰り上げ）参加、かつ
+   平均収支ランキング上位3位に👑を付ける
+═══════════════════════════════════════════════ */
+function crownInfo(){
+  const max=totalSessions();
+  if(max===0)return{threshold:0,ranked:[]};
+  const threshold=Math.ceil(max/2); // 半数以上（繰り上げ）
+  const stats=computeStats();
+  const qualified=stats.filter(p=>p.count>=threshold&&p.count>0).sort((a,b)=>b.avg-a.avg);
+  return{threshold,ranked:qualified.slice(0,3).map((p,i)=>({id:p.id,rank:i+1}))};
+}
+
+/* ═══════════════════════════════════════════════
+   FORMAT
+═══════════════════════════════════════════════ */
+function fmt(n){
+  if(n===null||n===undefined||isNaN(n))return"—";
+  return(n>=0?"+":`−`)+"¥"+Math.abs(Math.round(n)).toLocaleString("ja-JP");
+}
+function fmtK(n){return(n>=0?"+":"")+Math.round(n/1000)+"k";}
+function fmtDev(v){return(v===null||v===undefined)?"—":(+v).toFixed(1);}
+function devCol(v){if(v===null)return"#5a7060";return v>=60?"#39e07a":v>=50?"#c8a84b":v>=40?"#7a9080":"#d94040";}
+function devBadge(v){
+  const c=devCol(v),txt=(v===null)?"—":fmtDev(v);
+  return`<span class="dev-pill" style="background:${c}22;border:1px solid ${c}44;color:${c}">${txt}</span>`;
+}
+
+const CROWN_META=[
+  {emoji:"🥇",cls:"crown-gold",  label:"1位",color:"#ffd700"},
+  {emoji:"🥈",cls:"crown-silver",label:"2位",color:"#c0c0d8"},
+  {emoji:"🥉",cls:"crown-bronze",label:"3位",color:"#d4915a"},
+];
+
+/* ═══════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════ */
+let _tt;
+function toast(msg){const el=document.getElementById("toast");el.textContent=msg;el.style.display="block";clearTimeout(_tt);_tt=setTimeout(()=>el.style.display="none",2800);}
+
+/* ═══════════════════════════════════════════════
+   CHART HELPERS
+═══════════════════════════════════════════════ */
+const GC="rgba(90,112,96,.22)",TS={color:"#5a7060",font:{size:10}};
+function killChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+function killAllCharts(){Object.keys(charts).forEach(killChart);}
+function mkChart(id,cfg){killChart(id);const el=document.getElementById(id);if(!el)return;charts[id]=new Chart(el,cfg);}
+
+/* ゼロライン / 50ラインカスタムプラグイン */
+function zeroLinePlugin(){return{id:"zl",afterDraw(c){
+  const{ctx,scales:{y,x}}=c;if(!y)return;
+  const py=y.getPixelForValue(0);if(py<y.top||py>y.bottom)return;
+  ctx.save();ctx.beginPath();ctx.moveTo(x.left,py);ctx.lineTo(x.right,py);
+  ctx.strokeStyle="rgba(255,255,255,0.42)";ctx.lineWidth=1.8;ctx.setLineDash([]);ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,0.38)";ctx.font="bold 9px 'Segoe UI',sans-serif";ctx.textAlign="right";
+  ctx.fillText("±0",x.right-3,py-3);ctx.restore();
+}};}
+function fiftyLinePlugin(){return{id:"fl",afterDraw(c){
+  const{ctx,scales:{y,x}}=c;if(!y)return;
+  const py=y.getPixelForValue(50);if(py<y.top||py>y.bottom)return;
+  ctx.save();ctx.beginPath();ctx.moveTo(x.left,py);ctx.lineTo(x.right,py);
+  ctx.strokeStyle="rgba(200,168,75,0.65)";ctx.lineWidth=1.8;ctx.setLineDash([6,3]);ctx.stroke();
+  ctx.fillStyle="rgba(200,168,75,0.75)";ctx.font="bold 9px 'Segoe UI',sans-serif";
+  ctx.textAlign="right";ctx.setLineDash([]);ctx.fillText("平均50",x.right-3,py-3);ctx.restore();
+}};}
+
+/* ═══════════════════════════════════════════════
+   RENDER ROUTER
+═══════════════════════════════════════════════ */
+function render(){
+  killAllCharts();
+  document.querySelectorAll(".ntab").forEach(b=>b.classList.toggle("on",b.dataset.view===view));
+  const pt=document.getElementById("tab-player");if(pt)pt.style.display=selPid?"":"none";
+  const main=document.getElementById("main");
+  if     (view==="today")  main.innerHTML=renderToday();
+  else if(view==="alltime")main.innerHTML=renderAllTime();
+  else if(view==="player") main.innerHTML=renderPlayer();
+  else if(view==="admin")  main.innerHTML=renderAdmin();
+  bindEvents();
+  requestAnimationFrame(initCharts);
+}
+
+/* ═══════════════════════════════════════════════
+   PAGE 1 — TODAY
+═══════════════════════════════════════════════ */
+function renderToday(){
+  const max=totalSessions();
+  if(!max||!DB.players.length)return emptyHtml("🃏","セッションデータがありません","管理ページからデータを追加してください");
+  const si=(todaySi===null||todaySi>=max)?max-1:todaySi;
+  if(todaySi===null)todaySi=max-1;
+  const meta=buildSessionMeta();const m=meta[si]||{mean:0,std:0,n:0};
+  const stats=computeStats();
+  const ci=crownInfo();
+
+  const participants=stats
+    .filter(p=>p.sessions[si]!==null&&p.sessions[si]!==undefined)
+    .map(p=>({...p,sessionVal:p.sessions[si],sessionDev:devScore(p.sessions[si],m.mean,m.std),firstEver:isFirstEver(p,si)}))
+    .sort((a,b)=>b.sessionVal-a.sessionVal);
+
+  const dotCount=Math.min(max,12),dotStart=Math.max(0,max-dotCount);
+  const dots=Array.from({length:dotCount},(_,i)=>{const idx=dotStart+i;return`<button class="sp-dot${idx===si?" on":""}" data-si="${idx}" title="${sessLabel(idx)}"></button>`;}).join("");
+
+  let cards="";
+  if(!participants.length){
+    cards=`<div class="empty" style="padding:28px 20px"><div class="empty-msg">このセッションの参加者がいません</div><div class="empty-sub">管理ページからデータを入力してください</div></div>`;
+  }else{
+    participants.forEach((p,idx)=>{
+      const rank=idx+1,cls=rank===1?"rank-1":rank===2?"rank-2":rank===3?"rank-3":"";
+      const vc=p.sessionVal>=0?"pos":"neg";
+      const dvW=Math.min(100,Math.max(0,p.sessionDev)),dvC=devCol(p.sessionDev);
+      const newBadge=p.firstEver?`<span class="new-badge">🆕 初参加</span>`:"";
+      const crownEntry=ci.ranked.find(x=>x.id===p.id);
+      const crownHtml=crownEntry?`<span class="${CROWN_META[crownEntry.rank-1].cls}" style="color:${CROWN_META[crownEntry.rank-1].color};font-size:13px">${CROWN_META[crownEntry.rank-1].emoji}</span>`:"";
+      cards+=`
+      <div class="rank-card ${cls}" data-pid="${p.id}">
+        <div class="dev-bg" style="width:${dvW}%;background:${dvC}"></div>
+        <div class="rank-pos"><span class="suit" style="color:${scol(rank)}">${gsuit(rank)}</span><span class="num">${rank}</span></div>
+        <div class="rank-info">
+          <div class="rank-name-row"><span class="rank-name">${p.name}</span>${crownHtml}${newBadge}</div>
+          <div class="rank-meta"><span>${p.count}回参加</span><span>累計 <span class="${p.total>=0?"pos":"neg"}">${fmt(p.total)}</span></span></div>
+        </div>
+        <div class="rank-right"><div class="rank-value ${vc}">${fmt(p.sessionVal)}</div>${devBadge(p.sessionDev)}</div>
+      </div>`;
+    });
+  }
+
+  return`
+  <div class="session-picker">
+    <button class="sp-arrow" id="sp-prev" ${si<=0?"disabled":""}>‹</button>
+    <div class="sp-center">
+      <div class="sp-label">${sessLabel(si)}</div>
+      <div class="sp-sub">${participants.length}人参加 · 平均 ${fmt(m.mean)}</div>
+      <div class="sp-dots">${dots}</div>
+    </div>
+    <button class="sp-arrow" id="sp-next" ${si>=max-1?"disabled":""}>›</button>
+  </div>
+  <div class="sec-hdr">
+    <span class="sec-title">収支ランキング</span>
+    ${si===max-1?`<span class="sess-badge new">LATEST</span>`:`<span class="sess-badge edit">SESSION ${si+1}</span>`}
+    <span class="sec-sub">偏差値付き</span>
+  </div>
+  <div class="rank-list">${cards}</div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   PAGE 2 — ALL TIME
+═══════════════════════════════════════════════ */
+function renderAllTime(){
+  const allStats=computeStats();
+  if(!allStats.length)return emptyHtml("🏆","プレイヤーがいません","管理ページから追加してください");
+  const ci=crownInfo();
+  const max=totalSessions();
+
+  const stabs=`<div class="sub-tabs">
+    <button class="stab ${atTab==="total"?"on":""}" data-stab="total">合計収支</button>
+    <button class="stab ${atTab==="avg"?"on":""}"   data-stab="avg">平均収支</button>
+    <button class="stab ${atTab==="dev"?"on":""}"   data-stab="dev">平均偏差値</button>
+  </div>`;
+
+  let sorted,valueFn,subFn,subLabel;
+  if(atTab==="total"){
+    sorted=[...allStats].sort((a,b)=>b.total-a.total);
+    valueFn=p=>fmt(p.total);subFn=p=>`${p.count}回 / 平均 ${fmt(p.avg)}`;subLabel="全期間累計収支";
+  }else if(atTab==="avg"){
+    sorted=[...allStats].filter(p=>p.count>0).sort((a,b)=>b.avg-a.avg);
+    valueFn=p=>fmt(p.avg);subFn=p=>`${p.count}回 / 累計 ${fmt(p.total)}`;subLabel="1回あたり平均収支";
+  }else{
+    sorted=[...allStats].filter(p=>p.count>0&&p.avgDev!==null).sort((a,b)=>b.avgDev-a.avgDev);
+    valueFn=p=>fmtDev(p.avgDev);subFn=p=>`${p.count}回 / 累計 ${fmt(p.total)}`;subLabel="参加セッション平均偏差値";
+  }
+
+  const minS=parseInt(atMinSess)||0;
+  const q=atSearch.trim().toLowerCase();
+  const filtered=sorted.filter(p=>{if(p.count<minS)return false;if(q&&!p.name.toLowerCase().includes(q))return false;return true;});
+
+  const filterBar=`<div class="filter-bar">
+    <label>検索</label>
+    <input class="filter-input search" id="at-search" placeholder="選手名で絞込…" value="${atSearch.replace(/"/g,"&quot;")}">
+    <div class="filter-sep"></div>
+    <label>参加</label>
+    <input class="filter-input num" id="at-min" type="number" min="0" placeholder="0" value="${atMinSess||""}">
+    <span style="font-size:11px;color:var(--muted);white-space:nowrap">回以上</span>
+  </div>`;
+
+  // 👑説明
+  const crownNote=max>0?`<p style="font-size:10px;color:var(--muted);margin-bottom:10px">👑 全${max}回中${ci.threshold}回以上参加（半数以上）かつ平均収支上位3名に付与</p>`:"";
+
+  let cards="";
+  filtered.forEach((p,idx)=>{
+    const rank=idx+1,cls=rank===1?"rank-1":rank===2?"rank-2":rank===3?"rank-3":"";
+    const numVal=atTab==="total"?p.total:atTab==="avg"?p.avg:p.avgDev;
+    const valCls=atTab==="dev"?(p.avgDev>=50?"pos":"neg"):(numVal>=0?"pos":"neg");
+    const dvC=devCol(p.avgDev),dvW=Math.min(100,Math.max(0,p.avgDev||0));
+    const crownEntry=ci.ranked.find(x=>x.id===p.id);
+    const cm=crownEntry?CROWN_META[crownEntry.rank-1]:null;
+    const crownHtml=cm?`<span class="${cm.cls}" style="color:${cm.color};font-size:13px">${cm.emoji}</span>`:"";
+    const qualBadge=(p.count>=ci.threshold&&ci.threshold>0&&!cm)?`<span class="qual-badge">対象</span>`:"";
+    cards+=`
+    <div class="rank-card ${cls}" data-pid="${p.id}">
+      <div class="dev-bg" style="width:${dvW}%;background:${dvC}"></div>
+      <div class="rank-pos"><span class="suit" style="color:${scol(rank)}">${gsuit(rank)}</span><span class="num">${rank}</span></div>
+      <div class="rank-info">
+        <div class="rank-name-row"><span class="rank-name">${p.name}</span>${crownHtml}${qualBadge}</div>
+        <div class="rank-meta"><span>${subFn(p)}</span></div>
+      </div>
+      <div class="rank-right"><div class="rank-value ${valCls}">${valueFn(p)}</div>${atTab==="dev"?"":devBadge(p.avgDev)}</div>
+    </div>`;
+  });
+  if(!filtered.length)cards=`<div class="empty" style="padding:28px"><div class="empty-msg">条件に一致する選手がいません</div></div>`;
+
+  return`${stabs}
+  <div class="sec-hdr"><span class="sec-title">${subLabel}</span><span class="sec-sub">${filtered.length}人表示</span></div>
+  ${crownNote}
+  ${filterBar}
+  <div class="rank-list">${cards}</div>`;
+}
+
+/* ═══════════════════════════════════════════════
+   PAGE 3 — PLAYER DETAIL
+═══════════════════════════════════════════════ */
+function renderPlayer(){
+  const stats=computeStats(),p=stats.find(x=>x.id===selPid);
+  if(!p)return emptyHtml("👤","プレイヤーが見つかりません","");
+  const ci=crownInfo();
+  const crownEntry=ci.ranked.find(x=>x.id===p.id);
+  const cm=crownEntry?CROWN_META[crownEntry.rank-1]:null;
+  const crownHtml=cm?`<span class="${cm.cls}" style="color:${cm.color};font-size:22px">${cm.emoji}</span>`:"";
+
+  // セッション別データ表（全セッション、不参加含む）
+  const max=totalSessions();
+  let tableRows="";
+  for(let si=0;si<max;si++){
+    const d=p.sessionDetails[si]||{si,v:null,dv:null,rank:null};
+    const absent=d.v===null;
+    const vc=absent?"muted":(d.v>=0?"pos":"neg");
+    const dvc=d.dv!==null?devCol(d.dv):"#5a7060";
+    tableRows+=`<tr class="${absent?"absent-row":""}">
+      <td class="td-name">${sessLabel(si)}</td>
+      <td class="${vc}">${absent?"—":fmt(d.v)}</td>
+      <td>${absent?"—":devBadge(d.dv)}</td>
+      <td>${absent?`<span style="color:var(--muted);font-size:11px">不参加</span>`:`<span style="color:${scol(d.rank||1)}">${gsuit(d.rank||1)}</span> <span style="color:var(--gold);font-weight:700">${d.rank}位</span>`}</td>
+    </tr>`;
+  }
+
+  return`
+  <button class="back-btn" id="btn-back">← ランキングに戻る</button>
+  <div class="player-hero">
+    <div style="font-size:10px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase">Player</div>
+    <div class="player-hero-name" style="color:${p.color}">${p.name}${crownHtml}</div>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-label">合計収支</div><div class="stat-value ${p.total>=0?"pos":"neg"}">${fmt(p.total)}</div></div>
+      <div class="stat-box"><div class="stat-label">平均収支</div><div class="stat-value ${p.avg>=0?"pos":"neg"}">${fmt(p.avg)}</div></div>
+      <div class="stat-box"><div class="stat-label">平均偏差値</div><div class="stat-value" style="color:${devCol(p.avgDev)}">${fmtDev(p.avgDev)}</div></div>
+      <div class="stat-box"><div class="stat-label">参加回数</div><div class="stat-value gold">${p.count}回</div></div>
+    </div>
+  </div>
+  ${p.count===0
+    ?`<div class="empty"><div class="empty-msg muted">まだセッションデータがありません</div></div>`
+    :`
+  <div class="chart-section"><h3>収支推移（累計 · 平均）</h3><canvas id="ch-line"></canvas></div>
+  <div class="chart-section"><h3>セッション別 収支（棒グラフ）</h3><canvas id="ch-bar"></canvas></div>
+  <div class="chart-section"><h3>偏差値 推移</h3><canvas id="ch-dev"></canvas></div>
+  <div class="chart-section">
+    <h3>全セッション 収支 · 偏差値 · 順位</h3>
+    <div class="sess-table-wrap">
+      <table class="sess-table">
+        <thead><tr><th class="td-left">セッション</th><th>収支</th><th>偏差値</th><th>順位</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+  </div>`
+  }`;
+}
+
+/* ═══════════════════════════════════════════════
+   PAGE 4 — ADMIN
+═══════════════════════════════════════════════ */
+function renderAdmin(){
+  if(!hostOk)return`
+  <div class="admin-panel"><div class="a-card"><h3>管理者認証</h3>
+    <div class="pin-wrap">
+      <div style="font-size:2.4rem">🔐</div>
+      <p style="color:var(--muted);font-size:12px">PINコードを入力（初期値: 1234）</p>
+      <input type="password" id="pin-in" placeholder="PIN" autocomplete="current-password">
+      <p class="pin-error" id="pin-err">PINが違います</p>
+      <button class="btn" id="pin-ok">認証する</button>
+    </div>
+  </div></div>`;
+
+  // ── 全回編集モード ──────────────────────────────────
+  if(adminMode==="allsessions"&&adminAllSessPid){
+    const p=DB.players.find(x=>x.id===adminAllSessPid);
+    if(p){
+      const max=totalSessions();
+      const pi=DB.players.indexOf(p);
+      let allRows="";
+      for(let si=0;si<max;si++){
+        const cur=p.sessions[si]!==null&&p.sessions[si]!==undefined?p.sessions[si]:null;
+        const curCls=cur!==null?(cur>=0?"pos":"neg"):"muted";
+        allRows+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--border2)">
+          <span style="min-width:140px;font-size:12px;color:var(--gold);font-weight:700">${sessLabel(si)}</span>
+          <input type="number" class="pe-input all-sess-input" data-si="${si}" placeholder="収支（不参加なら空欄）"
+            ${cur!==null?`value="${cur}"`:""}
+            style="color:${cur!==null?(cur>=0?"#39e07a":"#d94040"):"#f0e6c8"}">
+          <span class="pe-cur ${curCls}">${cur!==null?fmt(cur):"不参加"}</span>
+        </div>`;
+      }
+      return`<div class="admin-panel">
+      <div class="a-card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <button class="btn-sm" id="back-to-session">← 戻る</button>
+          <h3 style="margin:0">全セッション編集</h3>
+          <span style="font-size:14px;font-weight:900;color:${pcol(pi)}">● ${p.name}</span>
+        </div>
+        <p style="color:var(--muted);font-size:11px;margin-bottom:14px">各回の収支を編集できます。空欄にすると不参加扱いになります。</p>
+        <div style="margin-bottom:16px">${allRows}</div>
+        <button class="btn btn-gold" id="commit-allsess-btn">💾 ${p.name} の全データを保存</button>
+      </div>
+      </div>`;
+    }
+  }
+
+  // ── 通常モード（セッション単位入力）───────────────────
+  const max=totalSessions();
+  if(adminSi!==null&&adminSi>=max)adminSi=null;
+  const isNew=adminSi===null,editSi=isNew?max:adminSi;
+
+  let selectOpts=`<option value="new" ${isNew?"selected":""}>＋ 新しいセッションを追加（第${max+1}回）</option>`;
+  for(let i=max-1;i>=0;i--){
+    const cnt=DB.players.filter(p=>p.sessions[i]!==null&&p.sessions[i]!==undefined).length;
+    const nm=DB.sessionNames[i]?`「${DB.sessionNames[i]}」 `:"";
+    selectOpts+=`<option value="${i}" ${adminSi===i?"selected":""}>${nm}第${i+1}回を編集 (${cnt}人参加済)</option>`;
+  }
+
+  // プレイヤー行（チェックボックス付き）
+  const playerRows=DB.players.map((p,i)=>{
+    const cur=(!isNew&&p.sessions[editSi]!==null&&p.sessions[editSi]!==undefined)?p.sessions[editSi]:null;
+    const curText=cur!==null?fmt(cur):"未入力";
+    const curCls=cur!==null?(cur>=0?"pos":"neg"):"muted";
+    const isSelected=adminSelected.size===0||adminSelected.has(p.id);
+    return`<div class="player-edit-row" data-pid="${p.id}" data-name="${p.name.toLowerCase()}">
+      <input type="checkbox" class="pe-cb" data-pid="${p.id}" ${isSelected?"checked":""}>
+      <span class="pe-name" data-pid="${p.id}" style="color:${pcol(i)}">● ${p.name}</span>
+      <input type="number" class="pe-input si-input" data-pid="${p.id}"
+        placeholder="収支（不参加なら空欄）" ${cur!==null?`value="${cur}"`:""}
+        style="color:${cur!==null?(cur>=0?"#39e07a":"#d94040"):"#f0e6c8"}"
+        ${!isSelected?"disabled":""}>
+      <span class="pe-cur ${curCls}">${curText}</span>
+      <button class="btn-sm all-sess-btn" data-pid="${p.id}" title="この選手の全回を編集" style="margin-left:auto">📋 全回編集</button>
+      <button class="btn-red rm-player" data-pid="${p.id}">✕</button>
+    </div>`;
+  }).join("");
+
+  const selCount=adminSelected.size===0?DB.players.length:adminSelected.size;
+
+  const nameRows=Array.from({length:max},(_,i)=>`
+  <div class="sess-name-row">
+    <span class="sess-name-label">第${i+1}回</span>
+    <input class="sess-name-input filter-input" type="text" data-si="${i}" placeholder="セッション名（任意）" value="${(DB.sessionNames[i]||"").replace(/"/g,"&quot;")}">
+  </div>`).join("");
+
+  const pnameRows=DB.players.map((p,i)=>`
+  <div class="pname-row">
+    <span class="pname-label" style="color:${pcol(i)}">● ${p.name}</span>
+    <input class="pname-input filter-input" type="text" data-pid="${p.id}" placeholder="新しい名前" value="${p.name.replace(/"/g,"&quot;")}">
+  </div>`).join("");
+
+  return`<div class="admin-panel">
+
+  <div class="a-card">
+    <h3>プレイヤー追加</h3>
+    <div class="a-row">
+      <input type="text" id="np-name" placeholder="プレイヤー名">
+      <button class="btn" id="add-p-btn">追加</button>
+    </div>
+  </div>
+
+  ${DB.players.length?`
+  <div class="a-card">
+    <h3>選手名の変更</h3>
+    <div>${pnameRows}</div>
+    <div class="a-row" style="margin-top:11px">
+      <button class="btn btn-gold" id="save-pnames-btn">💾 名前を保存</button>
+    </div>
+  </div>`:""}
+
+  <div class="a-card">
+    <h3>収支を記録・編集</h3>
+
+    <div class="sess-selector">
+      <label>対象セッション</label>
+      <select id="sess-sel">${selectOpts}</select>
+      <span class="sess-badge ${isNew?"new":"edit"}">${isNew?"NEW":"EDIT"}</span>
+    </div>
+    <p style="color:var(--muted);font-size:11px;margin-bottom:12px">
+      ${isNew?`第${max+1}回を入力。不参加は空欄のままに。`:`第${editSi+1}回を編集。空欄にすると不参加扱い。`}
+    </p>
+
+    ${DB.players.length?`
+    <div class="p-filter-bar">
+      <input type="text" id="p-filter-input" placeholder="🔍 選手名で絞り込み…" value="${adminFilter.replace(/"/g,"&quot;")}">
+    </div>
+    <div class="p-filter-actions">
+      <button class="btn-sm" id="p-sel-all">✅ 全員選択</button>
+      <button class="btn-sm" id="p-sel-visible">👁 表示中を選択</button>
+      <button class="btn-sm" id="p-sel-none">☐ 全員解除</button>
+      <span class="sel-count" id="sel-count-badge">${selCount}人 選択中</span>
+    </div>
+    <div id="player-rows-wrap" style="margin-bottom:14px">${playerRows}</div>
+    <div class="a-row">
+      <button class="btn btn-gold" id="commit-btn">✅ 第${isNew?max+1:editSi+1}回を確定（選択中 ${selCount}人分）</button>
+    </div>`
+    :`<p style="color:var(--muted);font-size:13px">まずプレイヤーを追加してください</p>`}
+  </div>
+
+  ${max>0?`
+  <div class="a-card">
+    <h3>セッション名の設定</h3>
+    <p style="color:var(--muted);font-size:11px;margin-bottom:11px">名前を付けると「名前（第N回）」形式で表示されます</p>
+    <div>${nameRows}</div>
+    <div class="a-row" style="margin-top:11px"><button class="btn btn-gold" id="save-names-btn">💾 セッション名を保存</button></div>
+  </div>`:""}
+
+  ${max>0?`
+  <div class="a-card">
+    <h3>最新セッション削除</h3>
+    <p style="color:var(--muted);font-size:12px;margin-bottom:11px">第${max}回のデータを全員分削除します（元に戻せません）</p>
+    <button class="btn-red" id="del-last-btn" style="padding:8px 15px;border-radius:7px;font-size:13px">第${max}回を削除</button>
+  </div>`:""}
+
+  <div class="a-card">
+    <h3>PINコード変更</h3>
+    <div class="a-row">
+      <input type="password" id="new-pin" placeholder="新しいPIN（4文字以上）" style="max-width:200px">
+      <button class="btn" id="chpin-btn">変更</button>
+    </div>
+  </div>
+
+  </div>`;
+}
+
+
+}
+
+function emptyHtml(i,m,s){return`<div class="empty"><div class="empty-icon">${i}</div><div class="empty-msg">${m}</div><div class="empty-sub">${s}</div></div>`;}
+
+/* ─── 管理画面フィルターヘルパー（DOM操作のみ） ─── */
+// 検索文字列に基づいて行を表示/非表示（再レンダリングなし）
+function applyFilter(q){
+  const lq=(q||"").toLowerCase();
+  document.querySelectorAll(".player-edit-row[data-name]").forEach(row=>{
+    const name=row.dataset.name||"";
+    const match=!lq||name.includes(lq);
+    row.classList.toggle("filtered-out",!match);
+  });
+}
+
+// pid の行の入力を有効/無効にしてopacityを変える
+function toggleRow(pid,enabled){
+  const row=document.querySelector(`.player-edit-row[data-pid="${pid}"]`);
+  if(!row)return;
+  row.classList.toggle("unselected",!enabled);
+  const inp=row.querySelector(".si-input");
+  if(inp)inp.disabled=!enabled;
+}
+
+// 「N人選択中」バッジと確定ボタンのテキストを更新
+function updateSelCount(){
+  const max=totalSessions();
+  const isNew=adminSi===null;
+  const total=DB.players.length;
+  // adminSelected.size===0 は全員選択
+  const count=adminSelected.size===0?total:adminSelected.size;
+  const badge=document.getElementById("sel-count-badge");
+  if(badge)badge.textContent=`${count}人 選択中`;
+  const btn=document.getElementById("commit-btn");
+  if(btn)btn.textContent=`✅ 第${isNew?max+1:adminSi+1}回を確定（選択中 ${count}人分）`;
+}
+/* ═══════════════════════════════════════════════
+   CHARTS — 完全折れ線（tension:0）
+═══════════════════════════════════════════════ */
+function initCharts(){if(view==="player"&&selPid)initPlayerCharts();}
+
+function initPlayerCharts(){
+  const stats=computeStats(),p=stats.find(x=>x.id===selPid);
+  if(!p||p.count===0)return;
+  const meta=buildSessionMeta();
+  const attended=p.sessions.map((v,si)=>({v,si})).filter(x=>x.v!==null&&x.v!==undefined);
+  const labels=attended.map(x=>sessShort(x.si));
+
+  // 累計・平均収支 — 完全折れ線 tension:0
+  let c=0;const cData=[],aData=[];
+  attended.forEach((x,i)=>{c+=x.v;cData.push(c);aData.push(+(c/(i+1)).toFixed(0));});
+
+  mkChart("ch-line",{type:"line",
+    data:{labels,datasets:[
+      {label:"累計収支",data:cData,borderColor:p.color,backgroundColor:p.color+"18",
+       borderWidth:2.5,pointRadius:5,pointHoverRadius:7,
+       tension:0,fill:true,order:1},
+      {label:"平均収支",data:aData,borderColor:"#c8a84b",backgroundColor:"transparent",
+       borderWidth:1.8,pointRadius:3,pointHoverRadius:5,
+       borderDash:[6,3],tension:0,fill:false,order:2}
+    ]},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{labels:{color:"#5a7060",font:{size:10},boxWidth:10}}},
+      scales:{
+        x:{grid:{color:GC},ticks:{...TS,maxTicksLimit:12}},
+        y:{grid:{color:GC},ticks:{...TS,callback:fmtK},
+          afterBuildTicks(ax){if(!ax.ticks.find(t=>t.value===0))ax.ticks.push({value:0});ax.ticks.sort((a,b)=>a.value-b.value);}
+        }
+      },animation:{duration:450}
+    },
+    plugins:[zeroLinePlugin()]
+  });
+
+  // セッション別収支 — 棒グラフ（プラス緑・マイナス赤）
+  const bColors=attended.map(x=>x.v>=0?"#39e07a":"#d94040");
+  const bBorderColors=attended.map(x=>x.v>=0?"#2ab85e":"#b83030");
+  mkChart("ch-bar",{type:"bar",
+    data:{labels,datasets:[{
+      label:"収支",data:attended.map(x=>x.v),
+      backgroundColor:bColors,borderColor:bBorderColors,
+      borderWidth:1,borderRadius:4,borderSkipped:false
+    }]},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>`収支: ${fmt(ctx.parsed.y)}`}}
+      },
+      scales:{
+        x:{grid:{color:GC},ticks:{...TS,maxTicksLimit:12}},
+        y:{grid:{color:GC},ticks:{...TS,callback:fmtK},
+          afterBuildTicks(ax){if(!ax.ticks.find(t=>t.value===0))ax.ticks.push({value:0});ax.ticks.sort((a,b)=>a.value-b.value);}
+        }
+      },animation:{duration:450}
+    },
+    plugins:[zeroLinePlugin()]
+  });
+
+  // 偏差値 — 完全折れ線 tension:0
+  const devData=attended.map(x=>{const m=meta[x.si]||{mean:0,std:0};return devScore(x.v,m.mean,m.std);});
+  mkChart("ch-dev",{type:"line",
+    data:{labels,datasets:[
+      {label:"偏差値",data:devData,borderColor:p.color,backgroundColor:p.color+"18",
+       borderWidth:2.5,pointRadius:5,pointHoverRadius:7,
+       tension:0,fill:true}
+    ]},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>`偏差値: ${fmtDev(ctx.parsed.y)}`}}
+      },
+      scales:{
+        x:{grid:{color:GC},ticks:{...TS,maxTicksLimit:12}},
+        y:{
+          min:25,max:75,
+          grid:{color:GC},
+          ticks:{...TS,stepSize:10,callback:v=>v===50?`${v} ←平均`:String(v)}
+        }
+      },
+      animation:{duration:450}
+    },
+    plugins:[fiftyLinePlugin()]
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   EVENTS
+═══════════════════════════════════════════════ */
+function bindEvents(){
+  // ナビ
+  document.querySelectorAll(".ntab").forEach(b=>b.addEventListener("click",()=>{
+    if(b.dataset.view==="player"&&!selPid)return;
+    view=b.dataset.view;
+    if(view!=="player")selPid=null;
+    if(view!=="admin")hostOk=false;
+    render();
+  }));
+  // 全期間サブタブ
+  document.querySelectorAll(".stab").forEach(b=>b.addEventListener("click",()=>{atTab=b.dataset.stab;render();}));
+  // フィルター
+  const ats=document.getElementById("at-search"),atm=document.getElementById("at-min");
+  if(ats)ats.addEventListener("input",()=>{atSearch=ats.value;render();});
+  if(atm)atm.addEventListener("input",()=>{atMinSess=parseInt(atm.value)||0;render();});
+  // プレイヤーカード
+  document.querySelectorAll(".rank-card[data-pid]").forEach(c=>c.addEventListener("click",()=>{selPid=c.dataset.pid;view="player";render();}));
+  // 戻る
+  const bb=document.getElementById("btn-back");
+  if(bb)bb.addEventListener("click",()=>{selPid=null;view="today";render();});
+  // ピッカー
+  const prev=document.getElementById("sp-prev"),next=document.getElementById("sp-next");
+  if(prev)prev.addEventListener("click",()=>{const si=todaySi??totalSessions()-1;if(si>0){todaySi=si-1;render();}});
+  if(next)next.addEventListener("click",()=>{const max=totalSessions(),si=todaySi??max-1;if(si<max-1){todaySi=si+1;render();}});
+  document.querySelectorAll(".sp-dot").forEach(d=>d.addEventListener("click",()=>{todaySi=parseInt(d.dataset.si);render();}));
+  // PIN
+  const pinOk=document.getElementById("pin-ok");
+  if(pinOk){
+    const tryPin=()=>{
+      if(document.getElementById("pin-in").value===DB.hostPin){hostOk=true;document.getElementById("pin-err").style.display="none";render();}
+      else document.getElementById("pin-err").style.display="block";
+    };
+    pinOk.addEventListener("click",tryPin);
+    document.getElementById("pin-in").addEventListener("keydown",e=>e.key==="Enter"&&tryPin());
+  }
+  // プレイヤー追加
+  const addBtn=document.getElementById("add-p-btn");
+  if(addBtn){
+    const doAdd=async()=>{
+      const el=document.getElementById("np-name"),name=el.value.trim();
+      if(!name)return;
+      if(DB.players.find(p=>p.name===name)){toast("⚠️ 同名のプレイヤーがいます");return;}
+      DB.players.push({id:Date.now().toString(),name,sessions:Array(totalSessions()).fill(null)});
+      await saveDB();el.value="";toast(`✅ ${name} を追加しました`);render();
+    };
+    addBtn.addEventListener("click",doAdd);
+    document.getElementById("np-name").addEventListener("keydown",e=>e.key==="Enter"&&doAdd());
+  }
+  // プレイヤー削除
+  document.querySelectorAll(".rm-player").forEach(b=>b.addEventListener("click",async()=>{
+    const p=DB.players.find(x=>x.id===b.dataset.pid);
+    if(!confirm(`「${p?.name}」を削除しますか？`))return;
+    DB.players=DB.players.filter(x=>x.id!==b.dataset.pid);
+    await saveDB();render();
+  }));
+  // 選手名変更
+  const savePnames=document.getElementById("save-pnames-btn");
+  if(savePnames)savePnames.addEventListener("click",async()=>{
+    let changed=0;
+    document.querySelectorAll(".pname-input").forEach(inp=>{
+      const pid=inp.dataset.pid,newName=inp.value.trim();
+      if(!newName)return;
+      const p=DB.players.find(x=>x.id===pid);
+      if(p&&p.name!==newName){
+        if(DB.players.find(x=>x.name===newName&&x.id!==pid)){toast(`⚠️「${newName}」は既に使われています`);return;}
+        p.name=newName;changed++;
+      }
+    });
+    if(changed){await saveDB();toast(`✅ ${changed}件の選手名を変更しました`);render();}
+    else toast("変更はありませんでした");
+  });
+  // セッション選択
+  const sel=document.getElementById("sess-sel");
+  if(sel)sel.addEventListener("change",()=>{adminSi=sel.value==="new"?null:parseInt(sel.value);render();});
+
+  // ── フィルター入力（DOM操作のみ、再レンダリングなし）────────
+  const pfi=document.getElementById("p-filter-input");
+  if(pfi){
+    // 初期表示時にフィルターを即時反映
+    applyFilter(pfi.value);
+    pfi.addEventListener("input",()=>{
+      adminFilter=pfi.value;
+      applyFilter(pfi.value);
+      updateSelCount();
+    });
+  }
+
+  // ── 全員選択 ─────────────────────────────────────────────
+  const pSelAll=document.getElementById("p-sel-all");
+  if(pSelAll)pSelAll.addEventListener("click",()=>{
+    adminSelected.clear();
+    document.querySelectorAll(".pe-cb").forEach(cb=>{
+      cb.checked=true;
+      toggleRow(cb.dataset.pid,true);
+    });
+    updateSelCount();
+  });
+
+  // ── 表示中を選択 ─────────────────────────────────────────
+  const pSelVis=document.getElementById("p-sel-visible");
+  if(pSelVis)pSelVis.addEventListener("click",()=>{
+    // まず全解除
+    adminSelected.clear();
+    document.querySelectorAll(".player-edit-row").forEach(row=>{
+      const pid=row.dataset.pid;
+      const visible=!row.classList.contains("filtered-out");
+      if(visible){
+        adminSelected.add(pid);
+        const cb=row.querySelector(".pe-cb");
+        if(cb)cb.checked=true;
+        toggleRow(pid,true);
+      }else{
+        const cb=row.querySelector(".pe-cb");
+        if(cb)cb.checked=false;
+        toggleRow(pid,false);
+      }
+    });
+    updateSelCount();
+  });
+
+  // ── 全員解除 ─────────────────────────────────────────────
+  const pSelNone=document.getElementById("p-sel-none");
+  if(pSelNone)pSelNone.addEventListener("click",()=>{
+    adminSelected.clear();
+    document.querySelectorAll(".pe-cb").forEach(cb=>{
+      cb.checked=false;
+      toggleRow(cb.dataset.pid,false);
+    });
+    updateSelCount();
+  });
+
+  // ── 個別チェックボックス ──────────────────────────────────
+  document.querySelectorAll(".pe-cb").forEach(cb=>{
+    cb.addEventListener("change",()=>{
+      const pid=cb.dataset.pid;
+      if(cb.checked){
+        // 全員選択状態（Set空）から一人解除した場合の処理
+        if(adminSelected.size===0){
+          // 全員を一旦Setに入れてからこの人だけ外す、ではなく
+          // チェックした人だけSetに入れる方式に切り替え
+          DB.players.forEach(p=>{
+            if(p.id!==pid) adminSelected.add(p.id);
+          });
+        }
+        adminSelected.add(pid);
+      } else {
+        adminSelected.delete(pid);
+      }
+      toggleRow(pid,cb.checked);
+      updateSelCount();
+    });
+  });
+
+  // ── 全回編集ボタン ────────────────────────────────────────
+  document.querySelectorAll(".all-sess-btn").forEach(b=>b.addEventListener("click",()=>{
+    adminMode="allsessions";
+    adminAllSessPid=b.dataset.pid;
+    render();
+  }));
+
+  // ── 全回編集の戻るボタン ──────────────────────────────────
+  const backToSess=document.getElementById("back-to-session");
+  if(backToSess)backToSess.addEventListener("click",()=>{
+    adminMode="session";
+    adminAllSessPid=null;
+    render();
+  });
+
+  // ── 全回編集の保存 ────────────────────────────────────────
+  const cas=document.getElementById("commit-allsess-btn");
+  if(cas)cas.addEventListener("click",async()=>{
+    const p=DB.players.find(x=>x.id===adminAllSessPid);
+    if(!p)return;
+    const max=totalSessions();
+    while(p.sessions.length<max)p.sessions.push(null);
+    let changed=0;
+    document.querySelectorAll(".all-sess-input").forEach(inp=>{
+      const si=parseInt(inp.dataset.si);
+      const v=inp.value.trim();
+      if(v===""){p.sessions[si]=null;}
+      else{const n=parseFloat(v);if(!isNaN(n)){p.sessions[si]=n;changed++;}}
+    });
+    await saveDB();
+    toast(`✅ ${p.name} の全データを保存しました（${changed}回分）`);
+    adminMode="session";adminAllSessPid=null;
+    render();
+  });
+  // 収支確定（選択中プレイヤーのみ）
+  const cm=document.getElementById("commit-btn");
+  if(cm)cm.addEventListener("click",async()=>{
+    const max=totalSessions(),isNew=adminSi===null,targetSi=isNew?max:adminSi;
+    let recorded=0,skipped=0;
+    DB.players.forEach(p=>{while(p.sessions.length<=targetSi)p.sessions.push(null);});
+    document.querySelectorAll(".si-input").forEach(inp=>{
+      const pid=inp.dataset.pid;
+      // 選択中かどうか（Set空=全員対象）
+      const isSelected=adminSelected.size===0||adminSelected.has(pid);
+      if(!isSelected)return;
+      const v=inp.value.trim(),p=DB.players.find(x=>x.id===pid);if(!p)return;
+      if(v===""){p.sessions[targetSi]=null;skipped++;}
+      else{const n=parseFloat(v);if(!isNaN(n)){p.sessions[targetSi]=n;recorded++;}}
+    });
+    if(!recorded){toast("⚠️ 少なくとも1件入力してください");return;}
+    await saveDB();
+    toast(`✅ 第${targetSi+1}回: ${recorded}件記録（${skipped}件不参加）`);
+    if(isNew){todaySi=targetSi;adminSi=targetSi;}
+    render();
+  });
+  // セッション名保存
+  const saveNames=document.getElementById("save-names-btn");
+  if(saveNames)saveNames.addEventListener("click",async()=>{
+    document.querySelectorAll(".sess-name-input").forEach(inp=>{
+      const si=parseInt(inp.dataset.si),v=inp.value.trim();
+      if(v)DB.sessionNames[si]=v;else delete DB.sessionNames[si];
+    });
+    await saveDB();toast("✅ セッション名を保存しました");render();
+  });
+  // 最新削除
+  const dlb=document.getElementById("del-last-btn");
+  if(dlb)dlb.addEventListener("click",async()=>{
+    const max=totalSessions();if(!max)return;
+    if(!confirm(`第${max}回のデータを削除しますか？`))return;
+    DB.players.forEach(p=>{if(p.sessions.length===max)p.sessions.pop();});
+    delete DB.sessionNames[max-1];
+    todaySi=Math.max(0,max-2);adminSi=null;
+    await saveDB();toast(`🗑️ 第${max}回を削除しました`);render();
+  });
+  // PIN変更
+  const cp=document.getElementById("chpin-btn");
+  if(cp)cp.addEventListener("click",async()=>{
+    const v=document.getElementById("new-pin").value;
+    if(v.length<4){toast("⚠️ 4文字以上にしてください");return;}
+    DB.hostPin=v;await saveDB();document.getElementById("new-pin").value="";toast("✅ PINを変更しました");
+  });
+}
+
+/* ═══════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════ */
+(async()=>{
+  let connected=true;
+  try{
+    await loadDB();
+  }catch(e){
+    connected=false;
+    console.warn("boot loadDB failed:",e);
+  }finally{
+    // 必ずローディングを解除してアプリを表示する
+    todaySi=Math.max(0,totalSessions()-1);
+    document.getElementById("loading").style.display="none";
+    render();
+  }
+
+  // 接続できた場合のみリアルタイム同期を開始
+  if(connected){
+    try{ startRealtimeSync(); }catch(e){ console.warn("sync error:",e); }
+  } else {
+    // オフライン時は接続状態バナーを表示
+    const banner=document.createElement("div");
+    banner.id="offline-banner";
+    banner.innerHTML=`<span>⚠️ Firebase未接続 — このHTMLファイルをGitHub Pages等で公開するとデータが同期されます</span>
+      <button onclick="document.getElementById('offline-banner').style.display='none'" style="background:none;border:none;color:#f0e6c8;cursor:pointer;margin-left:10px;font-size:14px">✕</button>`;
+    Object.assign(banner.style,{
+      position:"fixed",bottom:"0",left:"0",right:"0",zIndex:"999",
+      background:"rgba(180,100,0,0.92)",color:"#f0e6c8",
+      padding:"10px 16px",fontSize:"12px",display:"flex",
+      alignItems:"center",justifyContent:"center",gap:"8px",
+      borderTop:"1px solid rgba(200,168,75,0.4)"
+    });
+    document.body.appendChild(banner);
+  }
+})();
+</script>
+</body>
+</html>
