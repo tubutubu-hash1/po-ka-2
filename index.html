@@ -246,18 +246,8 @@ let adminMode="session";      // "session"=セッション単位入力 / "allses
 let adminAllSessPid=null;     // 全回編集モード時の対象プレイヤーid
 let charts={};
 
-function normalizeDB(){
-  if(!DB || typeof DB!=="object")DB={players:[],hostPin:"1234",sessionNames:{}};
-  if(!Array.isArray(DB.players))DB.players=[];
-  DB.players.forEach(p=>{ if(!Array.isArray(p.sessions))p.sessions=[]; });
-  if(!DB.sessionNames || typeof DB.sessionNames!=="object")DB.sessionNames={};
-  DB.hostPin=String(DB.hostPin ?? "1234").trim() || "1234";
-}
-
 /* ═══════════════════════════════════════════════
    FIREBASE SETUP
-   - GitHub Pages / CDNブロック時も画面が真っ白にならないように安全化
-   - Firebaseが使えない場合は localStorage で動作
 ═══════════════════════════════════════════════ */
 const firebaseConfig={
   apiKey:"AIzaSyBnLa68l8Kb8xV2ZWzXcZIG5LxsnHK_iow",
@@ -268,157 +258,64 @@ const firebaseConfig={
   appId:"1:450122987435:web:cd82fc0ceeb2ee1e4444ee",
   measurementId:"G-M87XM983WJ"
 };
-
-let db=null;
-let DOC=null;
-let FIREBASE_READY=false;
-
-function initFirebase(){
-  try{
-    if(!window.firebase || !firebase.initializeApp || !firebase.firestore){
-      throw new Error("Firebase SDK が読み込めませんでした");
-    }
-    if(!firebase.apps.length)firebase.initializeApp(firebaseConfig);
-    db=firebase.firestore();
-    DOC=db.collection("poker").doc("data");
-    FIREBASE_READY=true;
-    return true;
-  }catch(e){
-    FIREBASE_READY=false;
-    console.warn("Firebase unavailable. localStorage mode:",e.message);
-    return false;
-  }
-}
-
-initFirebase();
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+const DOC=db.collection("poker").doc("data");
 
 /* ═══════════════════════════════════════════════
-   STORAGE — Firestore + localStorage fallback
-   loadDB : Firestoreから読み込み。失敗時はlocalStorage。
-   saveDB : localStorageに保存し、可能ならFirestoreへ同期。
-   startRealtimeSync : Firestoreが使える場合のみ監視。
+   STORAGE — Firestore版
+   loadDB : Firestoreから1回読み込む
+   saveDB : Firestoreへ書き込む
+   startRealtimeSync : onSnapshotでリアルタイム監視
 ═══════════════════════════════════════════════ */
-function normalizeDB(){
-  if(!DB || typeof DB!=="object")DB={};
-  if(!Array.isArray(DB.players))DB.players=[];
-  if(!DB.sessionNames || typeof DB.sessionNames!=="object")DB.sessionNames={};
-  if(DB.hostPin===undefined || DB.hostPin===null || String(DB.hostPin).trim()==="")DB.hostPin="1234";
-  DB.hostPin=String(DB.hostPin).trim();
-  DB.players.forEach(p=>{
-    if(!p.id)p.id=Date.now().toString()+Math.random().toString(16).slice(2);
-    if(!p.name)p.name="NO NAME";
-    if(!Array.isArray(p.sessions))p.sessions=[];
-  });
-}
-
-function loadLocalDB(){
-  try{
-    const raw=localStorage.getItem(STORAGE_KEY);
-    if(raw){
-      const data=JSON.parse(raw);
-      if(data && typeof data==="object")DB=data;
-    }
-  }catch(e){
-    console.warn("localStorage load error:",e.message);
-  }
-  normalizeDB();
-}
-
-function saveLocalDB(){
-  try{
-    localStorage.setItem(STORAGE_KEY,JSON.stringify(DB));
-  }catch(e){
-    console.warn("localStorage save error:",e.message);
-  }
-}
-
 async function loadDB(){
-  // 先にローカルを読んで、Firebaseが失敗しても必ず画面を出せるようにする
-  loadLocalDB();
-
-  if(!FIREBASE_READY || !DOC)return false;
-
   try{
+    // 5秒でタイムアウト（ネットワーク遮断・Firebase接続不可の場合に備える）
     const snap=await Promise.race([
       DOC.get(),
-      new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),7000))
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),5000))
     ]);
     if(snap.exists){
       const data=snap.data();
       if(data)DB=data;
-      normalizeDB();
-      saveLocalDB();
-    }else{
-      normalizeDB();
-      await DOC.set(JSON.parse(JSON.stringify(DB)));
     }
-    return true;
   }catch(e){
-    FIREBASE_READY=false;
-    console.warn("loadDB Firestore error. localStorage mode:",e.message);
-    normalizeDB();
-    return false;
+    console.warn("loadDB error:",e.message);
+    // 接続できなくてもアプリは起動する（ローカル初期値で動作）
   }
+  if(!DB.sessionNames)DB.sessionNames={};
+  if(!DB.players)DB.players=[];
+  if(!DB.hostPin)DB.hostPin="1234";
 }
 
 async function saveDB(){
-  normalizeDB();
-  saveLocalDB();
-
-  if(!FIREBASE_READY || !DOC){
-    toast("✅ 端末内に保存しました（Firebase未接続）");
-    return false;
-  }
-
   try{
     await Promise.race([
       DOC.set(JSON.parse(JSON.stringify(DB))),
       new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),8000))
     ]);
-    return true;
   }catch(e){
-    FIREBASE_READY=false;
-    console.warn("saveDB Firestore error:",e.message);
-    toast("⚠️ Firebase保存に失敗。端末内には保存しました");
-    return false;
+    console.warn("saveDB error:",e.message);
+    toast("⚠️ 保存に失敗しました。ネットワークを確認してください");
   }
 }
 
-function showConnectionBanner(msg){
-  if(document.getElementById("offline-banner"))return;
-  const banner=document.createElement("div");
-  banner.id="offline-banner";
-  banner.innerHTML=`<span>${msg}</span>
-    <button onclick="document.getElementById('offline-banner').remove()" style="background:none;border:none;color:#f0e6c8;cursor:pointer;margin-left:10px;font-size:14px">✕</button>`;
-  Object.assign(banner.style,{
-    position:"fixed",bottom:"0",left:"0",right:"0",zIndex:"999",
-    background:"rgba(180,100,0,0.92)",color:"#f0e6c8",
-    padding:"10px 16px",fontSize:"12px",display:"flex",
-    alignItems:"center",justifyContent:"center",gap:"8px",
-    borderTop:"1px solid rgba(200,168,75,0.4)"
-  });
-  document.body.appendChild(banner);
-}
-
+// リアルタイム監視 — 他のユーザーが書き込むと即座に画面更新
 function startRealtimeSync(){
-  if(!FIREBASE_READY || !DOC)return false;
   DOC.onSnapshot(snap=>{
     if(!snap.exists)return;
     const remote=snap.data();
+    // 自分が書き込み中でなければ画面を更新
     if(JSON.stringify(remote)!==JSON.stringify(DB)){
       DB=remote;
-      normalizeDB();
-      saveLocalDB();
+      if(!DB.sessionNames)DB.sessionNames={};
+      if(!DB.players)DB.players=[];
+      // todaySiが未設定なら最新に合わせる
       const max=totalSessions();
       if(todaySi===null||todaySi>=max)todaySi=Math.max(0,max-1);
       render();
     }
-  },err=>{
-    FIREBASE_READY=false;
-    console.warn("onSnapshot error:",err.message);
-    showConnectionBanner("⚠️ Firebaseに接続できません。GitHub PagesのConsoleでエラーを確認してください。現在は端末内保存で動作中です。");
   });
-  return true;
 }
 
 /* ═══════════════════════════════════════════════
@@ -986,7 +883,10 @@ function initPlayerCharts(){
       plugins:{legend:{labels:{color:"#5a7060",font:{size:10},boxWidth:10}}},
       scales:{
         x:{grid:{color:GC},ticks:{...TS,maxTicksLimit:12}},
-        y:{grid:{color:GC},ticks:{...TS,callback:fmtK},
+        y:{
+          suggestedMin:0,
+          suggestedMax:0,
+          grid:{color:GC},ticks:{...TS,callback:fmtK},
           afterBuildTicks(ax){if(!ax.ticks.find(t=>t.value===0))ax.ticks.push({value:0});ax.ticks.sort((a,b)=>a.value-b.value);}
         }
       },animation:{duration:450}
@@ -1074,24 +974,13 @@ function bindEvents(){
   document.querySelectorAll(".sp-dot").forEach(d=>d.addEventListener("click",()=>{todaySi=parseInt(d.dataset.si);render();}));
   // PIN
   const pinOk=document.getElementById("pin-ok");
-  const pinIn=document.getElementById("pin-in");
-  const pinErr=document.getElementById("pin-err");
-  if(pinOk&&pinIn){
+  if(pinOk){
     const tryPin=()=>{
-      const inputPin=String(pinIn.value ?? "").trim();
-      const savedPin=String(DB.hostPin ?? "1234").trim();
-      if(inputPin===savedPin){
-        hostOk=true;
-        if(pinErr)pinErr.style.display="none";
-        render();
-      }else{
-        if(pinErr)pinErr.style.display="block";
-        pinIn.select();
-      }
+      if(document.getElementById("pin-in").value===DB.hostPin){hostOk=true;document.getElementById("pin-err").style.display="none";render();}
+      else document.getElementById("pin-err").style.display="block";
     };
     pinOk.addEventListener("click",tryPin);
-    pinIn.addEventListener("keydown",e=>{if(e.key==="Enter")tryPin();});
-    pinIn.focus();
+    document.getElementById("pin-in").addEventListener("keydown",e=>e.key==="Enter"&&tryPin());
   }
   // プレイヤー追加
   const addBtn=document.getElementById("add-p-btn");
@@ -1288,46 +1177,46 @@ function bindEvents(){
   // PIN変更
   const cp=document.getElementById("chpin-btn");
   if(cp)cp.addEventListener("click",async()=>{
-    const el=document.getElementById("new-pin");
-    const v=String(el.value ?? "").trim();
+    const v=document.getElementById("new-pin").value;
     if(v.length<4){toast("⚠️ 4文字以上にしてください");return;}
-    DB.hostPin=v;
-    await saveDB();
-    el.value="";
-    toast("✅ PINを変更しました");
+    DB.hostPin=v;await saveDB();document.getElementById("new-pin").value="";toast("✅ PINを変更しました");
   });
 }
 
 /* ═══════════════════════════════════════════════
    BOOT
 ═══════════════════════════════════════════════ */
-window.addEventListener("error",e=>{
-  console.error("Global error:",e.error||e.message);
-  const l=document.getElementById("loading");
-  if(l)l.style.display="none";
-  const main=document.getElementById("main");
-  if(main && !main.innerHTML.trim()){
-    main.innerHTML=`<div class="empty"><div class="empty-msg">起動エラー</div><div class="empty-sub">Consoleを確認してください: ${String(e.message||"").replace(/[<>&]/g,"_")}</div></div>`;
-  }
-});
-
 (async()=>{
-  const loading=document.getElementById("loading");
-  let connected=false;
+  let connected=true;
   try{
-    connected=await loadDB();
+    await loadDB();
   }catch(e){
-    console.warn("boot error:",e);
+    connected=false;
+    console.warn("boot loadDB failed:",e);
   }finally{
+    // 必ずローディングを解除してアプリを表示する
     todaySi=Math.max(0,totalSessions()-1);
-    if(loading)loading.style.display="none";
+    document.getElementById("loading").style.display="none";
     render();
   }
 
-  if(connected && FIREBASE_READY){
-    startRealtimeSync();
-  }else{
-    showConnectionBanner("⚠️ Firebase未接続 — 現在は端末内保存で動作中です。GitHub PagesではConsoleのFirebaseエラーを確認してください。");
+  // 接続できた場合のみリアルタイム同期を開始
+  if(connected){
+    try{ startRealtimeSync(); }catch(e){ console.warn("sync error:",e); }
+  } else {
+    // オフライン時は接続状態バナーを表示
+    const banner=document.createElement("div");
+    banner.id="offline-banner";
+    banner.innerHTML=`<span>⚠️ Firebase未接続 — このHTMLファイルをGitHub Pages等で公開するとデータが同期されます</span>
+      <button onclick="document.getElementById('offline-banner').style.display='none'" style="background:none;border:none;color:#f0e6c8;cursor:pointer;margin-left:10px;font-size:14px">✕</button>`;
+    Object.assign(banner.style,{
+      position:"fixed",bottom:"0",left:"0",right:"0",zIndex:"999",
+      background:"rgba(180,100,0,0.92)",color:"#f0e6c8",
+      padding:"10px 16px",fontSize:"12px",display:"flex",
+      alignItems:"center",justifyContent:"center",gap:"8px",
+      borderTop:"1px solid rgba(200,168,75,0.4)"
+    });
+    document.body.appendChild(banner);
   }
 })();
 </script>
